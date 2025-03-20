@@ -18,7 +18,7 @@ return new class extends Migration
             $table->decimal('harga_jual');
             $table->integer('qty');
             $table->decimal('sub_total');
-            $table->timestamp('tanggal_penjualan');
+            $table->timestamps('');
 
 
         });

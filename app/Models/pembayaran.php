@@ -11,14 +11,14 @@ class pembayaran extends Model
     use HasFactory;
 
     protected $fillable = [
-        'Metode_pembayaran',
+        'metode_pembayaran',
         'image',
         'is_cash',
     ];
 
     protected $appends = ['image_url'];
 
-    public function orders(): HasMany
+    public function penjualans(): HasMany
     {
         return $this->hasMany(penjualan::class);
     }

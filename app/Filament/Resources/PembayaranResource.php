@@ -39,7 +39,7 @@ class PembayaranResource extends Resource implements HasShieldPermissions
     {
         return $form
             ->schema([
-                Forms\Components\TextInput::make('Metode_pembayaran')
+                Forms\Components\TextInput::make('metode_pembayaran')
                     ->label('Metode Pembayaran')
                     ->required()
                     ->maxLength(255),
@@ -59,7 +59,7 @@ class PembayaranResource extends Resource implements HasShieldPermissions
             ->columns([
                 Tables\Columns\ImageColumn::make('image')
                     ->label('Logo Pembayaran'),
-                Tables\Columns\TextColumn::make('Metode_pembayaran')
+                Tables\Columns\TextColumn::make('metode_pembayaran')
                     ->label('Metode Pembayaran')
                     ->searchable(),
                 Tables\Columns\IconColumn::make('is_cash')

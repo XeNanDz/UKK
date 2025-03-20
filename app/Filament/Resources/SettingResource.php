@@ -58,12 +58,11 @@ class SettingResource extends Resource implements HasShieldPermissions
                 Forms\Components\TextInput::make('name_printer')
                     ->maxLength(255)
                     ->label('Nama Printer')
-                    ->helperText('Samakan dengan nama printer yang anda gunakan dan sudah terdaftar atau terhubung. Contoh: Epson T20')
-                    ->hidden(fn (Setting $record) => $record->print_via_mobile) // Disembunyikan jika print_via_mobile bernilai true
-                    ->dehydrated(fn (Setting $record): bool => $record->print_via_mobile === 0),
+                    ->helperText('Microsoft Print to PDF')
+                    #->hidden(fn (Setting $record) => $record->print_via_mobile) // Disembunyikan jika print_via_mobile bernilai true
+                     ->dehydrated(fn (?Setting $record): bool => $record ? $record->print_via_mobile : true), // Disembunyikan jika print_via_mobile bernilai true
                 Forms\Components\FileUpload::make('image')
                     ->image()
-                    ->required()
                     ->imageResizeMode('cover')
                     ->imageResizeTargetWidth('200')
                     ->imageResizeTargetHeight('200')

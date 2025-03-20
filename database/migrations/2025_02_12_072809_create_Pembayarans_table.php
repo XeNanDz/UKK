@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('pembayarans', function (Blueprint $table) {
                 $table->id();
-                $table->string('Metode_pembayaran');
+                $table->string('metode_pembayaran');
                 $table->string('image');
                 $table->boolean('is_cash')->default(false);
                 $table->timestamps();

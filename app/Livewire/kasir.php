@@ -2,30 +2,43 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
 use App\Models\Produk;
-use App\Models\Pelanggan;
-use App\Models\Pembayaran;
-use App\Models\Penjualan;
-use App\Models\DetailPenjualan;
 use App\Models\Setting;
-use Filament\Notifications\Notification;
+use Livewire\Component;
+use App\Models\Pelanggan;
+use App\Models\Penjualan;
+use App\Models\Pembayaran;
+use Filament\Forms\Components\Grid;
 use Mike42\Escpos\Printer;
+use Filament\Forms\Components\Select;
+use App\Models\DetailPenjualan;
+use Filament\Forms\Contracts\HasForms;
+use Filament\Notifications\Notification;
+use Filament\Forms\Concerns\InteractsWithForms;
 use Mike42\Escpos\PrintConnectors\WindowsPrintConnector;
+use Filament\Resources\Resource;
+use Filament\Forms\Form;
+use Filament\Forms;
+use Filament\Forms\Set;
+use Filament\Pages\Page;
 
-class Kasir extends Component
+class Kasir extends Component implements HasForms
 {
-    public $cart = [];
+    use InteractsWithForms;
+
     public $search = '';
     public $print_via_mobile = false;
     public $barcode = '';
-    public $nama_pelanggan = 'Customer';
+    public $pelanggan_id = null;
     public $pembayaran_id = 0;
     public $pembayaran;
     public $penjualan_items = [];
-    public $sub_total = 0;
+    public $total_harga = 0;
     public $showConfirmationModal = false;
     public $penjualanToPrint = null;
+    public $diskon = 0; // Diskon global dalam persentase
+    public $uang_pembayaran = 0;
+    public $kembalian = 0;
 
     protected $listeners = [
         'scanResult' => 'handleScanResult',
@@ -59,6 +72,7 @@ class Kasir extends Component
                     'nama_produk' => $produk->nama_produk,
                     'harga_jual' => $produk->harga_jual,
                     'qty' => 1,
+                    'diskon' => 0, // Diskon per barang default 0
                 ];
             }
 
@@ -76,6 +90,62 @@ class Kasir extends Component
         ]);
     }
 
+    public function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\Grid::make(1)
+                    ->schema([
+                        Select::make('pelanggan_id')
+                            ->label('Pelanggan')
+                            ->options(Pelanggan::pluck('nama', 'id'))
+                            ->columnSpan(1),
+                        Select::make('pembayaran_id')
+                            ->required()
+                            ->label('Metode Pembayaran')
+                            ->options(Pembayaran::pluck('metode_pembayaran', 'id'))
+                            ->columnSpan(1),
+                        Forms\Components\TextInput::make('uang_pembayaran')
+                            ->label('Uang Pembayaran (Rp)')
+                            ->numeric()
+                            ->required()
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, Set $set) {
+                                $total = $this->calculateTotal();
+                                $kembalian = $state - $total;
+                                $set('kembalian', $kembalian);
+                            }),
+                        Forms\Components\TextInput::make('diskon')
+                            ->label('Diskon Global (%)')
+                            ->numeric()
+                            ->default(0)
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, Set $set) {
+                                $total = $this->calculateTotal();
+                                $kembalian = $this->uang_pembayaran - $total;
+                                $set('kembalian', $kembalian);
+                            }),
+                        Forms\Components\TextInput::make('kembalian')
+                            ->label('Kembalian (Rp)')
+                            ->numeric()
+                            ->disabled(),
+                    ]),
+                Forms\Components\Repeater::make('penjualan_items')
+                    ->schema([
+                        Forms\Components\TextInput::make('diskon')
+                            ->label('Diskon per Barang (%)')
+                            ->numeric()
+                            ->default(0)
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, Set $set) {
+                                $total = $this->calculateTotal();
+                                $kembalian = $this->uang_pembayaran - $total;
+                                $set('kembalian', $kembalian);
+                            }),
+                    ]),
+            ]);
+    }
+
     public function mount()
     {
         $settings = Setting::first();
@@ -87,7 +157,7 @@ class Kasir extends Component
         $this->pembayaran = Pembayaran::all();
     }
 
-    public function addTopenjualan($produkId)
+    public function addToPenjualan($produkId)
     {
         $produk = Produk::find($produkId);
         if ($produk) {
@@ -115,6 +185,7 @@ class Kasir extends Component
                     'nama_produk' => $produk->nama_produk,
                     'harga_jual' => $produk->harga_jual,
                     'qty' => 1,
+                    'diskon' => 0, // Diskon per barang default 0
                 ];
             }
 
@@ -122,7 +193,7 @@ class Kasir extends Component
         }
     }
 
-    public function increaseqty($produk_id)
+    public function increaseQty($produk_id)
     {
         $produk = Produk::find($produk_id);
         if (!$produk) {
@@ -150,7 +221,7 @@ class Kasir extends Component
         session()->put('penjualanItems', $this->penjualan_items);
     }
 
-    public function decreaseqty($produk_id)
+    public function decreaseQty($produk_id)
     {
         foreach ($this->penjualan_items as $key => $item) {
             if ($item['produk_id'] == $produk_id) {
@@ -170,164 +241,107 @@ class Kasir extends Component
     {
         $total = 0;
         foreach ($this->penjualan_items as $item) {
-            $total += $item['qty'] * $item['harga_jual'];
+            $qty = (int)$item['qty'];
+            $harga_jual = (float)$item['harga_jual'];
+            $diskon = (float)$item['diskon']; // Ambil diskon per barang
+
+            // Hitung subtotal dengan diskon per barang
+            $subtotal = $qty * $harga_jual;
+            $subtotal -= $subtotal * ($diskon / 100);
+
+            $total += $subtotal;
         }
-        $this->sub_total = $total;
-        return $total;
+
+        // Hitung diskon global (jika ada)
+        $diskon_global = (float)$this->diskon;
+        $total -= $total * ($diskon_global / 100);
+
+        $this->total_harga = $total;
+        return $this->total_harga;
     }
 
-    public function resetpenjualan()
+    public function resetPenjualan()
     {
-        session()->forget(['penjualanItems', 'nama_pelanggan', 'pembayaran_id']);
+        session()->forget(['penjualanItems', 'pelanggan_id', 'pembayaran_id']);
         $this->penjualan_items = [];
         $this->pembayaran_id = null;
-        $this->sub_total = 0;
+        $this->diskon = 0;
+        $this->uang_pembayaran = 0;
+        $this->kembalian = 0;
+        $this->total_harga = 0;
+    }
+
+    public function calculateKembalian()
+    {
+        $total = $this->calculateTotal();
+        return $this->uang_pembayaran - $total;
     }
 
     public function checkout()
     {
+        // Validasi data
         $this->validate([
-            'nama_pelanggan' => 'string|max:255',
-            'pembayaran_id' => 'required'
+            'pelanggan_id' => 'nullable|exists:pelanggans,id',
+            'pembayaran_id' => 'required|exists:pembayarans,id',
+            'uang_pembayaran' => 'required|numeric|min:' . $this->calculateTotal(),
         ]);
 
-        // Pastikan pelanggan_id dan pembayaran_id ada
-        if (!$this->pelanggan_id || !$this->pembayaran_id) {
-            Notification::make()
-                ->title('Pelanggan atau metode pembayaran tidak valid')
-                ->danger()
-                ->send();
-            return;
-        }
-
-        $penjualan = Penjualan::create([
-            'user_id' => auth()->id(),
-            'pelanggan_id' => $this->pelanggan_id,
-            'total_harga' => $this->calculateTotal(),
-            'pembayaran_id' => $this->pembayaran_id,
-            'tanggal_penjualan' => now(),
-        ]);
-
-        foreach ($this->penjualan_items as $item) {
-            DetailPenjualan::create([
-                'penjualan_id' => $penjualan->id,
-                'produk_id' => $item['produk_id'],
-                'qty' => $item['qty'],
-                'harga_jual' => $item['harga_jual'],
-                'sub_total' => $item['qty'] * $item['harga_jual'],
+        try {
+            // Simpan data penjualan
+            $penjualan = Penjualan::create([
+                'user_id' => auth()->id(),
+                'pelanggan_id' => $this->pelanggan_id,
+                'total_harga' => $this->calculateTotal(),
+                'pembayaran_id' => $this->pembayaran_id,
+                'diskon' => $this->diskon,
+                'uang_pembayaran' => $this->uang_pembayaran,
+                'kembalian' => $this->kembalian,
+                'created_at' => now(),
             ]);
 
-            // Kurangi stok produk
-            $produk = Produk::find($item['produk_id']);
-            $produk->stok -= $item['qty'];
-            $produk->save();
-        }
+            // Simpan detail penjualan
+            foreach ($this->penjualan_items as $item) {
+                DetailPenjualan::create([
+                    'penjualan_id' => $penjualan->id,
+                    'produk_id' => $item['produk_id'],
+                    'qty' => $item['qty'],
+                    'harga_jual' => $item['harga_jual'],
+                    'diskon' => $item['diskon'], // Simpan diskon per barang
+                    'sub_total' => $item['qty'] * $item['harga_jual'] * (1 - ($item['diskon'] / 100)),
+                ]);
 
-        $this->penjualanToPrint = $penjualan->id;
-        $this->showConfirmationModal = true;
-
-        Notification::make()
-            ->title('Penjualan berhasil disimpan')
-            ->success()
-            ->send();
-
-        $this->resetpenjualan();
-    }
-
-    public function confirmPrint1()
-    {
-        try {
-            $penjualan = Penjualan::findOrFail($this->penjualanToPrint);
-            $penjualan_items = DetailPenjualan::where('penjualan_id', $penjualan->id)->get();
-            $setting = Setting::first();
-
-            $connector = new WindowsPrintConnector($setting->name_printer);
-            $printer = new Printer($connector);
-
-            $lineWidth = 32;
-
-            function formatRow($name, $qty, $harga_jual, $lineWidth)
-            {
-                $nameWidth = 16;
-                $qtyWidth = 8;
-                $harga_jualWidth = 8;
-
-                $nameLines = str_split($name, $nameWidth);
-                $output = '';
-
-                for ($i = 0; $i < count($nameLines) - 1; $i++) {
-                    $output .= str_pad($nameLines[$i], $lineWidth) . "\n";
-                }
-
-                $lastLine = $nameLines[count($nameLines) - 1];
-                $lastLine = str_pad($lastLine, $nameWidth);
-                $qty = str_pad($qty, $qtyWidth, " ", STR_PAD_BOTH);
-                $harga_jual = str_pad($harga_jual, $harga_jualWidth, " ", STR_PAD_LEFT);
-
-                $output .= $lastLine . $qty . $harga_jual;
-                return $output;
+                // Kurangi stok produk
+                $produk = Produk::find($item['produk_id']);
+                $produk->stok -= $item['qty'];
+                $produk->save();
             }
 
-            $printer->setJustification(Printer::JUSTIFY_CENTER);
-            $printer->setTextSize(1, 2);
-            $printer->setEmphasis(true);
-            $printer->text($setting->shop . "\n");
-            $printer->setTextSize(1, 1);
-            $printer->setEmphasis(false);
-            $printer->text($setting->address . "\n");
-            $printer->text($setting->phone . "\n");
-            $printer->text("================================\n");
-
-            $printer->setJustification(Printer::JUSTIFY_LEFT);
-
-            // Periksa apakah relasi pelanggan ada
-            if ($penjualan->pelanggan) {
-                $printer->text("Nama: " . $penjualan->pelanggan->nama . "\n");
-            }
-
-            // Periksa apakah relasi pembayaran ada
-            if ($penjualan->pembayaran) {
-                $printer->text("Pembayaran: " . $penjualan->pembayaran->metode_pembayaran . "\n");
-            }
-
-            $printer->text("Tanggal: " . $penjualan->created_at->format('d-m-Y H:i:s') . "\n");
-            $printer->text("================================\n");
-            $printer->text(formatRow("Nama Barang", "Qty", "Harga", $lineWidth) . "\n");
-            $printer->text("--------------------------------\n");
-
-            foreach ($penjualan_items as $item) {
-                $produk = Produk::find($item->produk_id);
-                $printer->text(formatRow($produk->nama_produk, $item->qty, number_format($item->harga_jual), $lineWidth) . "\n");
-            }
-
-            $printer->text("--------------------------------\n");
-
-            $total = $penjualan->total_harga;
-            $printer->setEmphasis(true);
-            $printer->text(formatRow("Total", "", number_format($total), $lineWidth) . "\n");
-            $printer->setEmphasis(false);
-
-            $printer->setJustification(Printer::JUSTIFY_CENTER);
-            $printer->text("================================\n");
-            $printer->text("Terima Kasih!\n");
-            $printer->text("================================\n");
-
-            $printer->cut();
-            $printer->close();
-
+            // Tampilkan notifikasi sukses
             Notification::make()
-                ->title('Struk berhasil dicetak')
+                ->title('Penjualan berhasil disimpan')
                 ->success()
                 ->send();
+
+            // Reset form
+            $this->resetPenjualan();
+
+            // Set penjualanToPrint untuk modal konfirmasi
+            $this->penjualanToPrint = $penjualan->id;
+            $this->showConfirmationModal = true;
+
         } catch (\Exception $e) {
+            // Tampilkan notifikasi error
             Notification::make()
-                ->title('Printer tidak terdaftar')
-                ->icon('heroicon-o-printer')
+                ->title('Gagal menyimpan penjualan')
+                ->body('Terjadi kesalahan: ' . $e->getMessage())
                 ->danger()
                 ->send();
         }
+    }
 
-        $this->showConfirmationModal = false;
-        $this->penjualanToPrint = null;
+    public function printStruk($id)
+    {
+        // Redirect ke route cetak struk
+        return redirect()->route('kasir.printStruk', $id);
     }
 }

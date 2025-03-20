@@ -47,45 +47,48 @@ class ProdukResource extends Resource
     }
 
     public static function form(Form $form): Form
-    {
-        return $form
-            ->schema([
-                TextInput::make('nama_produk')
+{
+    return $form
+        ->schema([
+            TextInput::make('nama_produk')
                 ->label('Nama Produk')
-                    ->afterStateUpdated(function (Set $set, $state) {
-                        $set('slug', Produk::generateUniqueSlug($state));
-                    }),
-                Forms\Components\Select::make('kategori_id')
+                ->afterStateUpdated(function (Set $set, $state) {
+                    $set('slug', Produk::generateUniqueSlug($state));
+                }),
+            Forms\Components\Select::make('kategori_id')
                 ->label('Kategori Produk')
                 ->relationship('kategori', 'nama_kategori') // Relasi ke tabel kategori
                 ->required(),
-                TextInput::make('slug')
-                    ->required()
-                    ->readOnly()
-                    ->maxLength(255),
-                TextInput::make('harga_beli')
+            TextInput::make('slug')
+                ->required()
+                ->readOnly()
+                ->maxLength(255),
+            TextInput::make('harga_beli')
                 ->label('Harga Beli')
-                    ->required()
-                    ->numeric()
-                    ->prefix('Rp.'),
-                TextInput::make('harga_jual')
+                ->required()
+                ->numeric()
+                ->prefix('Rp.'),
+            TextInput::make('harga_jual')
                 ->label('Harga Jual')
-                    ->required()
-                    ->numeric()
-                    ->prefix('Rp.'),
-                TextInput::make('stok')
+                ->required()
+                ->numeric()
+                ->prefix('Rp.'),
+            TextInput::make('stok')
                 ->label('Stok Produk')
-                    ->required()
-                    ->numeric()
-                    ->default(1),
-                Forms\Components\Toggle::make('is_active')
-                    ->label('Produk Aktif')
-                    ->required(),
-                Forms\Components\FileUpload::make('image')
-                    ->label('Gambar Produk')
-                    ->image()
-                    ->maxSize(1024),
-                TextInput::make('barcode')
+                ->required()
+                ->numeric()
+                ->default(1),
+            Forms\Components\Toggle::make('is_active')
+                ->label('Produk Aktif')
+                ->required(),
+            Forms\Components\FileUpload::make('image')
+                ->label('Gambar Produk')
+                ->image()
+                ->directory('produk') // Simpan di direktori 'produk' di storage/app/public
+                ->visibility('public') // File dapat diakses secara publik
+                ->preserveFilenames() // Pertahankan nama file asli
+                ->maxSize(1024), // Batas ukuran file (dalam KB)
+            TextInput::make('barcode')
                 ->label('Barcode')
                 ->required()
                 ->unique('produks', 'barcode', ignoreRecord: true),
@@ -99,15 +102,16 @@ class ProdukResource extends Resource
 }
 
     public static function table(Table $table): Table
-    {
-        return $table
-            ->columns([
+{
+    return $table
+        ->columns([
             TextColumn::make('nama_produk')
                 ->label('Nama Produk')
                 ->searchable(),
             Tables\Columns\ImageColumn::make('image')
                 ->label('Gambar')
-                ->circular(),
+                ->disk('public') // Gunakan disk 'public' untuk mengakses file di storage/app/public
+                ->circular(), // Tampilkan gambar dalam bentuk lingkaran
             TextColumn::make('kategori.nama_kategori')
                 ->label('Kategori')
                 ->searchable(), // Menampilkan nama kategori dari relasi
@@ -121,25 +125,36 @@ class ProdukResource extends Resource
                 ->label('Stok')
                 ->numeric()
                 ->searchable(),
-                TextColumn::make('barcode')
+            TextColumn::make('barcode')
                 ->label('Barcode')
                 ->getStateUsing(function ($record) {
                     return $record->generateBarcode(); // Generate barcode
                 })
                 ->html(),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                Tables\Columns\TextColumn::make('deleted_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
+            Tables\Columns\TextColumn::make('created_at')
+                ->dateTime()
+                ->sortable()
+                ->toggleable(isToggledHiddenByDefault: true),
+            Tables\Columns\TextColumn::make('updated_at')
+                ->dateTime()
+                ->sortable()
+                ->toggleable(isToggledHiddenByDefault: true),
+            Tables\Columns\TextColumn::make('deleted_at')
+                ->dateTime()
+                ->sortable()
+                ->toggleable(isToggledHiddenByDefault: true),
+        ])
+        ->filters([
+            //
+        ])
+        ->actions([
+            Tables\Actions\EditAction::make(),
+            Tables\Actions\DeleteAction::make(),
+        ])
+        ->bulkActions([
+            Tables\Actions\BulkActionGroup::make([
+                Tables\Actions\DeleteBulkAction::make(),
+            ]),
 
 
             ])

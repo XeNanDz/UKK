@@ -32,9 +32,9 @@ class penjualan extends Model
         return $this->belongsTo(Pelanggan::class);
     }
 
-    public function pembayarans()
+    public function pembayaran()
     {
-        return $this->belongsTo(Pembayaran::class);
+        return $this->belongsTo(Pembayaran::class, 'pembayaran_id');
     }
 
     // Relasi ke tabel detail_penjualan

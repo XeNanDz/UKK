@@ -31,6 +31,7 @@ class Produk extends Model
     {
         return $this->belongsTo(Kategori::class);
     }
+
     public static function generateUniqueSlug(string $nama_produk): string
     {
         $slug = Str::slug($nama_produk);
@@ -47,13 +48,20 @@ class Produk extends Model
 
     public function getImageUrlAttribute()
     {
-        return $this->image ? url('storage/'. $this->image) : null;
+        // Pastikan kolom `image` menyimpan path relatif ke storage
+        if ($this->image) {
+            return asset('storage/' . $this->image);
+        }
+
+        // Jika tidak ada gambar, kembalikan URL gambar default
+        return asset('images/default-product.png'); // Ganti dengan path gambar default Anda
     }
 
     public function scopeSearch($query, $value)
     {
         $query->where("nama_produk", "like", "%{$value}%");
     }
+
     public function generateBarcode()
     {
         return DNS1D::getBarcodeHTML($this->barcode, 'C128'); // Format barcode C128

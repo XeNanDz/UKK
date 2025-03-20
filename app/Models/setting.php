@@ -9,5 +9,7 @@ class Setting extends Model
 {
     //
     use HasFactory;
+
+
     protected $fillable = ['shop', 'address', 'phone','name_printer', 'image', 'print_via_mobile'];
 }

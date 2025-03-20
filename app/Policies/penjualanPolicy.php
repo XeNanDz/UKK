@@ -3,10 +3,10 @@
 namespace App\Policies;
 
 use App\Models\User;
-use App\Models\penjualan;
+use App\Models\Penjualan;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
-class penjualanPolicy
+class PenjualanPolicy
 {
     use HandlesAuthorization;
 
@@ -21,7 +21,7 @@ class penjualanPolicy
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, penjualan $penjualan): bool
+    public function view(User $user, Penjualan $penjualan): bool
     {
         return $user->can('{{ View }}');
     }
@@ -37,7 +37,7 @@ class penjualanPolicy
     /**
      * Determine whether the user can update the model.
      */
-    public function update(User $user, penjualan $penjualan): bool
+    public function update(User $user, Penjualan $penjualan): bool
     {
         return $user->can('update_penjualan');
     }
@@ -45,7 +45,7 @@ class penjualanPolicy
     /**
      * Determine whether the user can delete the model.
      */
-    public function delete(User $user, penjualan $penjualan): bool
+    public function delete(User $user, Penjualan $penjualan): bool
     {
         return $user->can('{{ Delete }}');
     }
@@ -61,7 +61,7 @@ class penjualanPolicy
     /**
      * Determine whether the user can permanently delete.
      */
-    public function forceDelete(User $user, penjualan $penjualan): bool
+    public function forceDelete(User $user, Penjualan $penjualan): bool
     {
         return $user->can('{{ ForceDelete }}');
     }
@@ -77,7 +77,7 @@ class penjualanPolicy
     /**
      * Determine whether the user can restore.
      */
-    public function restore(User $user, penjualan $penjualan): bool
+    public function restore(User $user, Penjualan $penjualan): bool
     {
         return $user->can('{{ Restore }}');
     }
@@ -93,7 +93,7 @@ class penjualanPolicy
     /**
      * Determine whether the user can replicate.
      */
-    public function replicate(User $user, penjualan $penjualan): bool
+    public function replicate(User $user, Penjualan $penjualan): bool
     {
         return $user->can('{{ Replicate }}');
     }
